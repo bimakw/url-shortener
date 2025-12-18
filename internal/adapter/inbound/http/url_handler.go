@@ -220,6 +220,26 @@ func (h *URLHandler) BulkCreateShortURLs(w http.ResponseWriter, r *http.Request)
 	Success(w, http.StatusCreated, "Bulk URL creation completed", response)
 }
 
+func (h *URLHandler) GetLinkPreview(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		Error(w, http.StatusBadRequest, "URL parameter is required")
+		return
+	}
+
+	preview, err := h.urlUseCase.GetLinkPreview(r.Context(), url)
+	if err != nil {
+		if err == usecase.ErrInvalidURL {
+			Error(w, http.StatusBadRequest, "Invalid URL format")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to fetch link preview")
+		return
+	}
+
+	Success(w, http.StatusOK, "Link preview fetched", preview)
+}
+
 func getClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header
 	xff := r.Header.Get("X-Forwarded-For")

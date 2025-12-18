@@ -62,3 +62,11 @@ type BulkCreateURLResponse struct {
 	Failed     int              `json:"failed"`
 	Results    []BulkURLResult  `json:"results"`
 }
+
+type LinkPreview struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Image       string `json:"image,omitempty"`
+	SiteName    string `json:"site_name,omitempty"`
+	URL         string `json:"url"`
+}
