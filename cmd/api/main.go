@@ -18,6 +18,7 @@ import (
 	redisRepo "github.com/bimakw/url-shortener/internal/adapter/outbound/redis"
 	"github.com/bimakw/url-shortener/internal/application/usecase"
 	"github.com/bimakw/url-shortener/internal/infrastructure"
+	"github.com/bimakw/url-shortener/pkg/geoip"
 )
 
 func main() {
@@ -77,13 +78,18 @@ func main() {
 		logger.Info("redis connected")
 	}
 
+	// Initialize GeoIP client
+	geoipClient := geoip.NewClient()
+	logger.Info("geoip client initialized")
+
 	// Initialize use cases
 	urlUseCase := usecase.NewURLUseCase(usecase.URLUseCaseConfig{
-		URLRepo:    urlRepo,
-		URLCache:   urlCache,
-		ClickRepo:  clickRepo,
-		BaseURL:    cfg.App.BaseURL,
-		CodeLength: cfg.App.ShortCodeLength,
+		URLRepo:     urlRepo,
+		URLCache:    urlCache,
+		ClickRepo:   clickRepo,
+		GeoIPClient: geoipClient,
+		BaseURL:     cfg.App.BaseURL,
+		CodeLength:  cfg.App.ShortCodeLength,
 	})
 
 	// Initialize handlers
