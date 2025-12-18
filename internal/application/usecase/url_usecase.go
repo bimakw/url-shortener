@@ -8,32 +8,40 @@ import (
 
 	"github.com/bimakw/url-shortener/internal/domain/entity"
 	"github.com/bimakw/url-shortener/internal/domain/repository"
+	"github.com/bimakw/url-shortener/pkg/geoip"
 	"github.com/bimakw/url-shortener/pkg/nanoid"
+	"github.com/bimakw/url-shortener/pkg/preview"
+	"github.com/bimakw/url-shortener/pkg/utm"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrURLNotFound      = errors.New("url not found")
-	ErrURLExpired       = errors.New("url has expired")
-	ErrURLInactive      = errors.New("url is inactive")
-	ErrAliasExists      = errors.New("custom alias already exists")
-	ErrInvalidURL       = errors.New("invalid url")
-	ErrShortCodeExists  = errors.New("short code already exists")
+	ErrURLNotFound         = errors.New("url not found")
+	ErrURLExpired          = errors.New("url has expired")
+	ErrURLInactive         = errors.New("url is inactive")
+	ErrAliasExists         = errors.New("custom alias already exists")
+	ErrInvalidURL          = errors.New("invalid url")
+	ErrShortCodeExists     = errors.New("short code already exists")
+	ErrPasswordRequired    = errors.New("password required")
+	ErrInvalidPassword     = errors.New("invalid password")
 )
 
 type URLUseCase struct {
 	urlRepo      repository.URLRepository
 	urlCache     repository.URLCacheRepository
 	clickRepo    repository.ClickRepository
+	geoipClient  *geoip.Client
 	baseURL      string
 	codeLength   int
 }
 
 type URLUseCaseConfig struct {
-	URLRepo    repository.URLRepository
-	URLCache   repository.URLCacheRepository
-	ClickRepo  repository.ClickRepository
-	BaseURL    string
-	CodeLength int
+	URLRepo     repository.URLRepository
+	URLCache    repository.URLCacheRepository
+	ClickRepo   repository.ClickRepository
+	GeoIPClient *geoip.Client
+	BaseURL     string
+	CodeLength  int
 }
 
 func NewURLUseCase(cfg URLUseCaseConfig) *URLUseCase {
@@ -41,11 +49,12 @@ func NewURLUseCase(cfg URLUseCaseConfig) *URLUseCase {
 		cfg.CodeLength = 8
 	}
 	return &URLUseCase{
-		urlRepo:    cfg.URLRepo,
-		urlCache:   cfg.URLCache,
-		clickRepo:  cfg.ClickRepo,
-		baseURL:    strings.TrimSuffix(cfg.BaseURL, "/"),
-		codeLength: cfg.CodeLength,
+		urlRepo:     cfg.URLRepo,
+		urlCache:    cfg.URLCache,
+		clickRepo:   cfg.ClickRepo,
+		geoipClient: cfg.GeoIPClient,
+		baseURL:     strings.TrimSuffix(cfg.BaseURL, "/"),
+		codeLength:  cfg.CodeLength,
 	}
 }
 
@@ -81,14 +90,25 @@ func (uc *URLUseCase) CreateShortURL(ctx context.Context, req entity.CreateURLRe
 		expiresAt = &exp
 	}
 
+	// Hash password if provided
+	var passwordHash string
+	if req.Password != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		passwordHash = string(hash)
+	}
+
 	// Create URL entity
 	url := &entity.URL{
-		ShortCode:   shortCode,
-		OriginalURL: req.OriginalURL,
-		CustomAlias: req.CustomAlias,
-		UserID:      req.UserID,
-		ExpiresAt:   expiresAt,
-		IsActive:    true,
+		ShortCode:    shortCode,
+		OriginalURL:  req.OriginalURL,
+		CustomAlias:  req.CustomAlias,
+		UserID:       req.UserID,
+		ExpiresAt:    expiresAt,
+		IsActive:     true,
+		PasswordHash: passwordHash,
 	}
 
 	// Save to database
@@ -161,6 +181,15 @@ func (uc *URLUseCase) RecordClick(ctx context.Context, click *entity.Click) erro
 	// Record click asynchronously (fire and forget)
 	go func() {
 		ctx := context.Background()
+
+		// GeoIP lookup
+		if uc.geoipClient != nil && click.IPAddress != "" {
+			if geoInfo, err := uc.geoipClient.Lookup(ctx, click.IPAddress); err == nil && geoInfo != nil {
+				click.Country = geoInfo.Country
+				click.City = geoInfo.City
+			}
+		}
+
 		_ = uc.urlRepo.IncrementClickCount(ctx, url.ID)
 		if uc.clickRepo != nil {
 			_ = uc.clickRepo.Create(ctx, click)
@@ -280,16 +309,137 @@ func (uc *URLUseCase) toResponse(url *entity.URL) *entity.URLResponse {
 	}
 
 	return &entity.URLResponse{
-		ShortCode:   url.ShortCode,
-		ShortURL:    shortURL,
-		OriginalURL: url.OriginalURL,
-		ExpiresAt:   url.ExpiresAt,
-		CreatedAt:   url.CreatedAt,
-		ClickCount:  url.ClickCount,
-		QRCodeURL:   uc.baseURL + "/api/urls/" + url.ShortCode + "/qr",
+		ShortCode:         url.ShortCode,
+		ShortURL:          shortURL,
+		OriginalURL:       url.OriginalURL,
+		ExpiresAt:         url.ExpiresAt,
+		CreatedAt:         url.CreatedAt,
+		ClickCount:        url.ClickCount,
+		QRCodeURL:         uc.baseURL + "/api/urls/" + url.ShortCode + "/qr",
+		PasswordProtected: url.PasswordHash != "",
 	}
 }
 
 func isValidURL(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
+
+func (uc *URLUseCase) BulkCreateShortURLs(ctx context.Context, req entity.BulkCreateURLRequest) *entity.BulkCreateURLResponse {
+	results := make([]entity.BulkURLResult, len(req.URLs))
+	successful := 0
+
+	for i, urlReq := range req.URLs {
+		result := entity.BulkURLResult{
+			OriginalURL: urlReq.OriginalURL,
+		}
+
+		response, err := uc.CreateShortURL(ctx, urlReq)
+		if err != nil {
+			result.Success = false
+			switch err {
+			case ErrAliasExists:
+				result.Error = "custom alias already exists"
+			case ErrInvalidURL:
+				result.Error = "invalid URL format"
+			default:
+				result.Error = "failed to create short URL"
+			}
+		} else {
+			result.Success = true
+			result.Data = response
+			successful++
+		}
+
+		results[i] = result
+	}
+
+	return &entity.BulkCreateURLResponse{
+		Total:      len(req.URLs),
+		Successful: successful,
+		Failed:     len(req.URLs) - successful,
+		Results:    results,
+	}
+}
+
+func (uc *URLUseCase) GetLinkPreview(ctx context.Context, url string) (*entity.LinkPreview, error) {
+	if !isValidURL(url) {
+		return nil, ErrInvalidURL
+	}
+
+	p, err := preview.Fetch(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	return &entity.LinkPreview{
+		Title:       p.Title,
+		Description: p.Description,
+		Image:       p.Image,
+		SiteName:    p.SiteName,
+		URL:         p.URL,
+	}, nil
+}
+
+func (uc *URLUseCase) VerifyPassword(ctx context.Context, shortCode, password string) (*entity.URL, error) {
+	url, err := uc.urlRepo.GetByShortCode(ctx, shortCode)
+	if err != nil {
+		return nil, err
+	}
+	if url == nil {
+		return nil, ErrURLNotFound
+	}
+
+	if url.PasswordHash == "" {
+		return url, nil
+	}
+
+	if password == "" {
+		return nil, ErrPasswordRequired
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(url.PasswordHash), []byte(password)); err != nil {
+		return nil, ErrInvalidPassword
+	}
+
+	return url, nil
+}
+
+func (uc *URLUseCase) IsPasswordProtected(ctx context.Context, shortCode string) (bool, error) {
+	url, err := uc.urlRepo.GetByShortCode(ctx, shortCode)
+	if err != nil {
+		return false, err
+	}
+	if url == nil {
+		return false, ErrURLNotFound
+	}
+	return url.PasswordHash != "", nil
+}
+
+func (uc *URLUseCase) BuildUTMUrl(req entity.UTMBuildRequest) (*entity.UTMBuildResponse, error) {
+	if !isValidURL(req.URL) {
+		return nil, ErrInvalidURL
+	}
+
+	utmURL, err := utm.Build(req.URL, utm.Params{
+		Source:   req.UTM.Source,
+		Medium:   req.UTM.Medium,
+		Campaign: req.UTM.Campaign,
+		Term:     req.UTM.Term,
+		Content:  req.UTM.Content,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &entity.UTMBuildResponse{
+		OriginalURL: req.URL,
+		UTMUrl:      utmURL,
+	}, nil
+}
+
+func (uc *URLUseCase) StripUTM(rawURL string) (string, error) {
+	if !isValidURL(rawURL) {
+		return "", ErrInvalidURL
+	}
+	return utm.Strip(rawURL)
 }

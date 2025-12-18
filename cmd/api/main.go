@@ -18,6 +18,7 @@ import (
 	redisRepo "github.com/bimakw/url-shortener/internal/adapter/outbound/redis"
 	"github.com/bimakw/url-shortener/internal/application/usecase"
 	"github.com/bimakw/url-shortener/internal/infrastructure"
+	"github.com/bimakw/url-shortener/pkg/geoip"
 )
 
 func main() {
@@ -61,6 +62,7 @@ func main() {
 	// Initialize repositories
 	urlRepo := postgres.NewURLRepository(db)
 	clickRepo := postgres.NewClickRepository(db)
+	apiKeyRepo := postgres.NewAPIKeyRepository(db)
 
 	// Connect to Redis (optional)
 	var urlCache *redisRepo.URLCacheRepository
@@ -77,25 +79,35 @@ func main() {
 		logger.Info("redis connected")
 	}
 
+	// Initialize GeoIP client
+	geoipClient := geoip.NewClient()
+	logger.Info("geoip client initialized")
+
 	// Initialize use cases
 	urlUseCase := usecase.NewURLUseCase(usecase.URLUseCaseConfig{
-		URLRepo:    urlRepo,
-		URLCache:   urlCache,
-		ClickRepo:  clickRepo,
-		BaseURL:    cfg.App.BaseURL,
-		CodeLength: cfg.App.ShortCodeLength,
+		URLRepo:     urlRepo,
+		URLCache:    urlCache,
+		ClickRepo:   clickRepo,
+		GeoIPClient: geoipClient,
+		BaseURL:     cfg.App.BaseURL,
+		CodeLength:  cfg.App.ShortCodeLength,
 	})
+
+	// Initialize API key use case
+	apiKeyUseCase := usecase.NewAPIKeyUseCase(apiKeyRepo)
 
 	// Initialize handlers
 	urlHandler := handler.NewURLHandler(urlUseCase)
 	qrHandler := handler.NewQRHandler(urlUseCase, cfg.App.BaseURL)
+	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyUseCase)
 
 	// Setup router
 	router := handler.NewRouter(handler.RouterConfig{
-		URLHandler: urlHandler,
-		QRHandler:  qrHandler,
-		Logger:     logger,
-		RateLimit:  cfg.App.RateLimit,
+		URLHandler:    urlHandler,
+		QRHandler:     qrHandler,
+		APIKeyHandler: apiKeyHandler,
+		Logger:        logger,
+		RateLimit:     cfg.App.RateLimit,
 	})
 
 	// Create server

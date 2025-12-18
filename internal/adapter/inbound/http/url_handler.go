@@ -79,6 +79,12 @@ func (h *URLHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if password protected
+	if url.PasswordHash != "" {
+		Error(w, http.StatusForbidden, "This URL is password protected. Use POST /api/urls/{code}/verify to access.")
+		return
+	}
+
 	// Record click
 	click := &entity.Click{
 		ShortCode: shortCode,
@@ -194,6 +200,168 @@ func (h *URLHandler) DeleteURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	Success(w, http.StatusOK, "URL deleted", nil)
+}
+
+func (h *URLHandler) BulkCreateShortURLs(w http.ResponseWriter, r *http.Request) {
+	var req entity.BulkCreateURLRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Get user ID from context if authenticated
+	if userID, ok := r.Context().Value("user_id").(string); ok {
+		for i := range req.URLs {
+			req.URLs[i].UserID = userID
+		}
+	}
+
+	response := h.urlUseCase.BulkCreateShortURLs(r.Context(), req)
+
+	Success(w, http.StatusCreated, "Bulk URL creation completed", response)
+}
+
+func (h *URLHandler) GetLinkPreview(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		Error(w, http.StatusBadRequest, "URL parameter is required")
+		return
+	}
+
+	preview, err := h.urlUseCase.GetLinkPreview(r.Context(), url)
+	if err != nil {
+		if err == usecase.ErrInvalidURL {
+			Error(w, http.StatusBadRequest, "Invalid URL format")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to fetch link preview")
+		return
+	}
+
+	Success(w, http.StatusOK, "Link preview fetched", preview)
+}
+
+func (h *URLHandler) VerifyPassword(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.PathValue("code")
+	if shortCode == "" {
+		Error(w, http.StatusBadRequest, "Short code is required")
+		return
+	}
+
+	var req entity.VerifyPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	url, err := h.urlUseCase.VerifyPassword(r.Context(), shortCode, req.Password)
+	if err != nil {
+		switch err {
+		case usecase.ErrURLNotFound:
+			Error(w, http.StatusNotFound, "URL not found")
+		case usecase.ErrPasswordRequired:
+			Error(w, http.StatusUnauthorized, "Password required")
+		case usecase.ErrInvalidPassword:
+			Error(w, http.StatusUnauthorized, "Invalid password")
+		default:
+			Error(w, http.StatusInternalServerError, "Failed to verify password")
+		}
+		return
+	}
+
+	// Record click
+	click := &entity.Click{
+		ShortCode: shortCode,
+		IPAddress: getClientIP(r),
+		UserAgent: r.UserAgent(),
+		Referrer:  r.Referer(),
+	}
+	parseUserAgent(click)
+	_ = h.urlUseCase.RecordClick(r.Context(), click)
+
+	Success(w, http.StatusOK, "Password verified", map[string]string{
+		"original_url": url.OriginalURL,
+	})
+}
+
+func (h *URLHandler) CheckPasswordProtected(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.PathValue("code")
+	if shortCode == "" {
+		Error(w, http.StatusBadRequest, "Short code is required")
+		return
+	}
+
+	isProtected, err := h.urlUseCase.IsPasswordProtected(r.Context(), shortCode)
+	if err != nil {
+		if err == usecase.ErrURLNotFound {
+			Error(w, http.StatusNotFound, "URL not found")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to check password protection")
+		return
+	}
+
+	Success(w, http.StatusOK, "Password protection status", map[string]bool{
+		"password_protected": isProtected,
+	})
+}
+
+func (h *URLHandler) BuildUTMUrl(w http.ResponseWriter, r *http.Request) {
+	var req entity.UTMBuildRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	response, err := h.urlUseCase.BuildUTMUrl(req)
+	if err != nil {
+		if err == usecase.ErrInvalidURL {
+			Error(w, http.StatusBadRequest, "Invalid URL format")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to build UTM URL")
+		return
+	}
+
+	Success(w, http.StatusOK, "UTM URL built", response)
+}
+
+func (h *URLHandler) StripUTM(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		Error(w, http.StatusBadRequest, "URL parameter is required")
+		return
+	}
+
+	cleanURL, err := h.urlUseCase.StripUTM(url)
+	if err != nil {
+		if err == usecase.ErrInvalidURL {
+			Error(w, http.StatusBadRequest, "Invalid URL format")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to strip UTM parameters")
+		return
+	}
+
+	Success(w, http.StatusOK, "UTM parameters stripped", map[string]string{
+		"original_url": url,
+		"clean_url":    cleanURL,
+	})
 }
 
 func getClientIP(r *http.Request) string {

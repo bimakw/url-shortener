@@ -40,6 +40,21 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_clicks_url_id ON clicks(url_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_clicks_created_at ON clicks(created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_clicks_ip_address ON clicks(ip_address)`,
+		`ALTER TABLE urls ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
+		`CREATE TABLE IF NOT EXISTS api_keys (
+			id VARCHAR(36) PRIMARY KEY,
+			key VARCHAR(64) UNIQUE NOT NULL,
+			name VARCHAR(100) NOT NULL,
+			user_id VARCHAR(36) NOT NULL,
+			scopes JSONB NOT NULL DEFAULT '[]',
+			rate_limit INTEGER NOT NULL DEFAULT 100,
+			expires_at TIMESTAMP,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			last_used TIMESTAMP,
+			is_active BOOLEAN NOT NULL DEFAULT TRUE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`,
 	}
 
 	for _, migration := range migrations {
