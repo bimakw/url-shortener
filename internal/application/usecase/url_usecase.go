@@ -8,6 +8,7 @@ import (
 
 	"github.com/bimakw/url-shortener/internal/domain/entity"
 	"github.com/bimakw/url-shortener/internal/domain/repository"
+	"github.com/bimakw/url-shortener/pkg/geoip"
 	"github.com/bimakw/url-shortener/pkg/nanoid"
 	"github.com/bimakw/url-shortener/pkg/preview"
 	"golang.org/x/crypto/bcrypt"
@@ -28,16 +29,18 @@ type URLUseCase struct {
 	urlRepo      repository.URLRepository
 	urlCache     repository.URLCacheRepository
 	clickRepo    repository.ClickRepository
+	geoipClient  *geoip.Client
 	baseURL      string
 	codeLength   int
 }
 
 type URLUseCaseConfig struct {
-	URLRepo    repository.URLRepository
-	URLCache   repository.URLCacheRepository
-	ClickRepo  repository.ClickRepository
-	BaseURL    string
-	CodeLength int
+	URLRepo     repository.URLRepository
+	URLCache    repository.URLCacheRepository
+	ClickRepo   repository.ClickRepository
+	GeoIPClient *geoip.Client
+	BaseURL     string
+	CodeLength  int
 }
 
 func NewURLUseCase(cfg URLUseCaseConfig) *URLUseCase {
@@ -45,11 +48,12 @@ func NewURLUseCase(cfg URLUseCaseConfig) *URLUseCase {
 		cfg.CodeLength = 8
 	}
 	return &URLUseCase{
-		urlRepo:    cfg.URLRepo,
-		urlCache:   cfg.URLCache,
-		clickRepo:  cfg.ClickRepo,
-		baseURL:    strings.TrimSuffix(cfg.BaseURL, "/"),
-		codeLength: cfg.CodeLength,
+		urlRepo:     cfg.URLRepo,
+		urlCache:    cfg.URLCache,
+		clickRepo:   cfg.ClickRepo,
+		geoipClient: cfg.GeoIPClient,
+		baseURL:     strings.TrimSuffix(cfg.BaseURL, "/"),
+		codeLength:  cfg.CodeLength,
 	}
 }
 
@@ -176,6 +180,15 @@ func (uc *URLUseCase) RecordClick(ctx context.Context, click *entity.Click) erro
 	// Record click asynchronously (fire and forget)
 	go func() {
 		ctx := context.Background()
+
+		// GeoIP lookup
+		if uc.geoipClient != nil && click.IPAddress != "" {
+			if geoInfo, err := uc.geoipClient.Lookup(ctx, click.IPAddress); err == nil && geoInfo != nil {
+				click.Country = geoInfo.Country
+				click.City = geoInfo.City
+			}
+		}
+
 		_ = uc.urlRepo.IncrementClickCount(ctx, url.ID)
 		if uc.clickRepo != nil {
 			_ = uc.clickRepo.Create(ctx, click)
