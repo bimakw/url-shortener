@@ -293,3 +293,40 @@ func (uc *URLUseCase) toResponse(url *entity.URL) *entity.URLResponse {
 func isValidURL(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
+
+func (uc *URLUseCase) BulkCreateShortURLs(ctx context.Context, req entity.BulkCreateURLRequest) *entity.BulkCreateURLResponse {
+	results := make([]entity.BulkURLResult, len(req.URLs))
+	successful := 0
+
+	for i, urlReq := range req.URLs {
+		result := entity.BulkURLResult{
+			OriginalURL: urlReq.OriginalURL,
+		}
+
+		response, err := uc.CreateShortURL(ctx, urlReq)
+		if err != nil {
+			result.Success = false
+			switch err {
+			case ErrAliasExists:
+				result.Error = "custom alias already exists"
+			case ErrInvalidURL:
+				result.Error = "invalid URL format"
+			default:
+				result.Error = "failed to create short URL"
+			}
+		} else {
+			result.Success = true
+			result.Data = response
+			successful++
+		}
+
+		results[i] = result
+	}
+
+	return &entity.BulkCreateURLResponse{
+		Total:      len(req.URLs),
+		Successful: successful,
+		Failed:     len(req.URLs) - successful,
+		Results:    results,
+	}
+}

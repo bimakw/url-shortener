@@ -24,6 +24,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	// API routes
 	mux.HandleFunc("POST /api/urls", cfg.URLHandler.CreateShortURL)
+	mux.HandleFunc("POST /api/urls/bulk", cfg.URLHandler.BulkCreateShortURLs)
 	mux.HandleFunc("GET /api/urls/{code}", cfg.URLHandler.GetURLInfo)
 	mux.HandleFunc("GET /api/urls/{code}/stats", cfg.URLHandler.GetStats)
 	mux.HandleFunc("DELETE /api/urls/{id}", cfg.URLHandler.DeleteURL)

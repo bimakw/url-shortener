@@ -196,6 +196,30 @@ func (h *URLHandler) DeleteURL(w http.ResponseWriter, r *http.Request) {
 	Success(w, http.StatusOK, "URL deleted", nil)
 }
 
+func (h *URLHandler) BulkCreateShortURLs(w http.ResponseWriter, r *http.Request) {
+	var req entity.BulkCreateURLRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Get user ID from context if authenticated
+	if userID, ok := r.Context().Value("user_id").(string); ok {
+		for i := range req.URLs {
+			req.URLs[i].UserID = userID
+		}
+	}
+
+	response := h.urlUseCase.BulkCreateShortURLs(r.Context(), req)
+
+	Success(w, http.StatusCreated, "Bulk URL creation completed", response)
+}
+
 func getClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header
 	xff := r.Header.Get("X-Forwarded-For")
