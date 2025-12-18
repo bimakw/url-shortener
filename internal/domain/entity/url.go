@@ -5,16 +5,17 @@ import (
 )
 
 type URL struct {
-	ID          string     `json:"id"`
-	ShortCode   string     `json:"short_code"`
-	OriginalURL string     `json:"original_url"`
-	CustomAlias string     `json:"custom_alias,omitempty"`
-	UserID      string     `json:"user_id,omitempty"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	ClickCount  int64      `json:"click_count"`
-	IsActive    bool       `json:"is_active"`
+	ID           string     `json:"id"`
+	ShortCode    string     `json:"short_code"`
+	OriginalURL  string     `json:"original_url"`
+	CustomAlias  string     `json:"custom_alias,omitempty"`
+	UserID       string     `json:"user_id,omitempty"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	ClickCount   int64      `json:"click_count"`
+	IsActive     bool       `json:"is_active"`
+	PasswordHash string     `json:"-"`
 }
 
 func (u *URL) IsExpired() bool {
@@ -32,17 +33,23 @@ type CreateURLRequest struct {
 	OriginalURL string  `json:"original_url" validate:"required,url"`
 	CustomAlias string  `json:"custom_alias,omitempty" validate:"omitempty,min=3,max=20,alphanum"`
 	ExpiresIn   *int    `json:"expires_in,omitempty"` // in hours
+	Password    string  `json:"password,omitempty" validate:"omitempty,min=4,max=50"`
 	UserID      string  `json:"-"`
 }
 
 type URLResponse struct {
-	ShortCode   string     `json:"short_code"`
-	ShortURL    string     `json:"short_url"`
-	OriginalURL string     `json:"original_url"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ClickCount  int64      `json:"click_count"`
-	QRCodeURL   string     `json:"qr_code_url,omitempty"`
+	ShortCode         string     `json:"short_code"`
+	ShortURL          string     `json:"short_url"`
+	OriginalURL       string     `json:"original_url"`
+	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ClickCount        int64      `json:"click_count"`
+	QRCodeURL         string     `json:"qr_code_url,omitempty"`
+	PasswordProtected bool       `json:"password_protected"`
+}
+
+type VerifyPasswordRequest struct {
+	Password string `json:"password" validate:"required"`
 }
 
 type BulkCreateURLRequest struct {

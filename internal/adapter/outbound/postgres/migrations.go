@@ -40,6 +40,7 @@ func RunMigrations(ctx context.Context, db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_clicks_url_id ON clicks(url_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_clicks_created_at ON clicks(created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_clicks_ip_address ON clicks(ip_address)`,
+		`ALTER TABLE urls ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
 	}
 
 	for _, migration := range migrations {
