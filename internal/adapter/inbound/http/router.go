@@ -8,10 +8,11 @@ import (
 )
 
 type RouterConfig struct {
-	URLHandler  *URLHandler
-	QRHandler   *QRHandler
-	Logger      *slog.Logger
-	RateLimit   int
+	URLHandler    *URLHandler
+	QRHandler     *QRHandler
+	APIKeyHandler *APIKeyHandler
+	Logger        *slog.Logger
+	RateLimit     int
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -43,6 +44,14 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// UTM Builder
 	mux.HandleFunc("POST /api/utm/build", cfg.URLHandler.BuildUTMUrl)
 	mux.HandleFunc("GET /api/utm/strip", cfg.URLHandler.StripUTM)
+
+	// API Key Management
+	if cfg.APIKeyHandler != nil {
+		mux.HandleFunc("POST /api/keys", cfg.APIKeyHandler.CreateAPIKey)
+		mux.HandleFunc("GET /api/keys", cfg.APIKeyHandler.GetAPIKeys)
+		mux.HandleFunc("POST /api/keys/{id}/revoke", cfg.APIKeyHandler.RevokeAPIKey)
+		mux.HandleFunc("DELETE /api/keys/{id}", cfg.APIKeyHandler.DeleteAPIKey)
+	}
 
 	// Redirect (must be last as it's a catch-all)
 	mux.HandleFunc("GET /{code}", cfg.URLHandler.Redirect)
