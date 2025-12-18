@@ -316,6 +316,54 @@ func (h *URLHandler) CheckPasswordProtected(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (h *URLHandler) BuildUTMUrl(w http.ResponseWriter, r *http.Request) {
+	var req entity.UTMBuildRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	response, err := h.urlUseCase.BuildUTMUrl(req)
+	if err != nil {
+		if err == usecase.ErrInvalidURL {
+			Error(w, http.StatusBadRequest, "Invalid URL format")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to build UTM URL")
+		return
+	}
+
+	Success(w, http.StatusOK, "UTM URL built", response)
+}
+
+func (h *URLHandler) StripUTM(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		Error(w, http.StatusBadRequest, "URL parameter is required")
+		return
+	}
+
+	cleanURL, err := h.urlUseCase.StripUTM(url)
+	if err != nil {
+		if err == usecase.ErrInvalidURL {
+			Error(w, http.StatusBadRequest, "Invalid URL format")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to strip UTM parameters")
+		return
+	}
+
+	Success(w, http.StatusOK, "UTM parameters stripped", map[string]string{
+		"original_url": url,
+		"clean_url":    cleanURL,
+	})
+}
+
 func getClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header
 	xff := r.Header.Get("X-Forwarded-For")
