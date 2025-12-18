@@ -44,3 +44,21 @@ type URLResponse struct {
 	ClickCount  int64      `json:"click_count"`
 	QRCodeURL   string     `json:"qr_code_url,omitempty"`
 }
+
+type BulkCreateURLRequest struct {
+	URLs []CreateURLRequest `json:"urls" validate:"required,min=1,max=100,dive"`
+}
+
+type BulkURLResult struct {
+	OriginalURL string       `json:"original_url"`
+	Success     bool         `json:"success"`
+	Data        *URLResponse `json:"data,omitempty"`
+	Error       string       `json:"error,omitempty"`
+}
+
+type BulkCreateURLResponse struct {
+	Total      int              `json:"total"`
+	Successful int              `json:"successful"`
+	Failed     int              `json:"failed"`
+	Results    []BulkURLResult  `json:"results"`
+}
