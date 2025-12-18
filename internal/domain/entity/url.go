@@ -77,3 +77,21 @@ type LinkPreview struct {
 	SiteName    string `json:"site_name,omitempty"`
 	URL         string `json:"url"`
 }
+
+type UTMParams struct {
+	Source   string `json:"utm_source,omitempty" validate:"omitempty,max=100"`
+	Medium   string `json:"utm_medium,omitempty" validate:"omitempty,max=100"`
+	Campaign string `json:"utm_campaign,omitempty" validate:"omitempty,max=100"`
+	Term     string `json:"utm_term,omitempty" validate:"omitempty,max=100"`
+	Content  string `json:"utm_content,omitempty" validate:"omitempty,max=100"`
+}
+
+type UTMBuildRequest struct {
+	URL string    `json:"url" validate:"required,url"`
+	UTM UTMParams `json:"utm" validate:"required"`
+}
+
+type UTMBuildResponse struct {
+	OriginalURL string `json:"original_url"`
+	UTMUrl      string `json:"utm_url"`
+}

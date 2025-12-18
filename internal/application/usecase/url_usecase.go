@@ -11,6 +11,7 @@ import (
 	"github.com/bimakw/url-shortener/pkg/geoip"
 	"github.com/bimakw/url-shortener/pkg/nanoid"
 	"github.com/bimakw/url-shortener/pkg/preview"
+	"github.com/bimakw/url-shortener/pkg/utm"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -412,4 +413,33 @@ func (uc *URLUseCase) IsPasswordProtected(ctx context.Context, shortCode string)
 		return false, ErrURLNotFound
 	}
 	return url.PasswordHash != "", nil
+}
+
+func (uc *URLUseCase) BuildUTMUrl(req entity.UTMBuildRequest) (*entity.UTMBuildResponse, error) {
+	if !isValidURL(req.URL) {
+		return nil, ErrInvalidURL
+	}
+
+	utmURL, err := utm.Build(req.URL, utm.Params{
+		Source:   req.UTM.Source,
+		Medium:   req.UTM.Medium,
+		Campaign: req.UTM.Campaign,
+		Term:     req.UTM.Term,
+		Content:  req.UTM.Content,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &entity.UTMBuildResponse{
+		OriginalURL: req.URL,
+		UTMUrl:      utmURL,
+	}, nil
+}
+
+func (uc *URLUseCase) StripUTM(rawURL string) (string, error) {
+	if !isValidURL(rawURL) {
+		return "", ErrInvalidURL
+	}
+	return utm.Strip(rawURL)
 }
