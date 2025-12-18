@@ -30,8 +30,8 @@ func (r *URLRepository) Create(ctx context.Context, url *entity.URL) error {
 	url.IsActive = true
 
 	query := `
-		INSERT INTO urls (id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO urls (id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active, password_hash)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
@@ -45,6 +45,7 @@ func (r *URLRepository) Create(ctx context.Context, url *entity.URL) error {
 		url.UpdatedAt,
 		url.ClickCount,
 		url.IsActive,
+		nullString(url.PasswordHash),
 	)
 
 	return err
@@ -52,13 +53,13 @@ func (r *URLRepository) Create(ctx context.Context, url *entity.URL) error {
 
 func (r *URLRepository) GetByShortCode(ctx context.Context, shortCode string) (*entity.URL, error) {
 	query := `
-		SELECT id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active
+		SELECT id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active, password_hash
 		FROM urls
 		WHERE short_code = $1 OR custom_alias = $1
 	`
 
 	url := &entity.URL{}
-	var customAlias, userID sql.NullString
+	var customAlias, userID, passwordHash sql.NullString
 	var expiresAt sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, query, shortCode).Scan(
@@ -72,6 +73,7 @@ func (r *URLRepository) GetByShortCode(ctx context.Context, shortCode string) (*
 		&url.UpdatedAt,
 		&url.ClickCount,
 		&url.IsActive,
+		&passwordHash,
 	)
 
 	if err != nil {
@@ -83,6 +85,7 @@ func (r *URLRepository) GetByShortCode(ctx context.Context, shortCode string) (*
 
 	url.CustomAlias = customAlias.String
 	url.UserID = userID.String
+	url.PasswordHash = passwordHash.String
 	if expiresAt.Valid {
 		url.ExpiresAt = &expiresAt.Time
 	}
@@ -92,13 +95,13 @@ func (r *URLRepository) GetByShortCode(ctx context.Context, shortCode string) (*
 
 func (r *URLRepository) GetByID(ctx context.Context, id string) (*entity.URL, error) {
 	query := `
-		SELECT id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active
+		SELECT id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active, password_hash
 		FROM urls
 		WHERE id = $1
 	`
 
 	url := &entity.URL{}
-	var customAlias, userID sql.NullString
+	var customAlias, userID, passwordHash sql.NullString
 	var expiresAt sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
@@ -112,6 +115,7 @@ func (r *URLRepository) GetByID(ctx context.Context, id string) (*entity.URL, er
 		&url.UpdatedAt,
 		&url.ClickCount,
 		&url.IsActive,
+		&passwordHash,
 	)
 
 	if err != nil {
@@ -123,6 +127,7 @@ func (r *URLRepository) GetByID(ctx context.Context, id string) (*entity.URL, er
 
 	url.CustomAlias = customAlias.String
 	url.UserID = userID.String
+	url.PasswordHash = passwordHash.String
 	if expiresAt.Valid {
 		url.ExpiresAt = &expiresAt.Time
 	}
@@ -132,7 +137,7 @@ func (r *URLRepository) GetByID(ctx context.Context, id string) (*entity.URL, er
 
 func (r *URLRepository) GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*entity.URL, error) {
 	query := `
-		SELECT id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active
+		SELECT id, short_code, original_url, custom_alias, user_id, expires_at, created_at, updated_at, click_count, is_active, password_hash
 		FROM urls
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -148,7 +153,7 @@ func (r *URLRepository) GetByUserID(ctx context.Context, userID string, limit, o
 	var urls []*entity.URL
 	for rows.Next() {
 		url := &entity.URL{}
-		var customAlias, uid sql.NullString
+		var customAlias, uid, passwordHash sql.NullString
 		var expiresAt sql.NullTime
 
 		err := rows.Scan(
@@ -162,6 +167,7 @@ func (r *URLRepository) GetByUserID(ctx context.Context, userID string, limit, o
 			&url.UpdatedAt,
 			&url.ClickCount,
 			&url.IsActive,
+			&passwordHash,
 		)
 		if err != nil {
 			return nil, err
@@ -169,6 +175,7 @@ func (r *URLRepository) GetByUserID(ctx context.Context, userID string, limit, o
 
 		url.CustomAlias = customAlias.String
 		url.UserID = uid.String
+		url.PasswordHash = passwordHash.String
 		if expiresAt.Valid {
 			url.ExpiresAt = &expiresAt.Time
 		}

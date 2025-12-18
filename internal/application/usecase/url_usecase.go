@@ -10,15 +10,18 @@ import (
 	"github.com/bimakw/url-shortener/internal/domain/repository"
 	"github.com/bimakw/url-shortener/pkg/nanoid"
 	"github.com/bimakw/url-shortener/pkg/preview"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrURLNotFound      = errors.New("url not found")
-	ErrURLExpired       = errors.New("url has expired")
-	ErrURLInactive      = errors.New("url is inactive")
-	ErrAliasExists      = errors.New("custom alias already exists")
-	ErrInvalidURL       = errors.New("invalid url")
-	ErrShortCodeExists  = errors.New("short code already exists")
+	ErrURLNotFound         = errors.New("url not found")
+	ErrURLExpired          = errors.New("url has expired")
+	ErrURLInactive         = errors.New("url is inactive")
+	ErrAliasExists         = errors.New("custom alias already exists")
+	ErrInvalidURL          = errors.New("invalid url")
+	ErrShortCodeExists     = errors.New("short code already exists")
+	ErrPasswordRequired    = errors.New("password required")
+	ErrInvalidPassword     = errors.New("invalid password")
 )
 
 type URLUseCase struct {
@@ -82,14 +85,25 @@ func (uc *URLUseCase) CreateShortURL(ctx context.Context, req entity.CreateURLRe
 		expiresAt = &exp
 	}
 
+	// Hash password if provided
+	var passwordHash string
+	if req.Password != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, err
+		}
+		passwordHash = string(hash)
+	}
+
 	// Create URL entity
 	url := &entity.URL{
-		ShortCode:   shortCode,
-		OriginalURL: req.OriginalURL,
-		CustomAlias: req.CustomAlias,
-		UserID:      req.UserID,
-		ExpiresAt:   expiresAt,
-		IsActive:    true,
+		ShortCode:    shortCode,
+		OriginalURL:  req.OriginalURL,
+		CustomAlias:  req.CustomAlias,
+		UserID:       req.UserID,
+		ExpiresAt:    expiresAt,
+		IsActive:     true,
+		PasswordHash: passwordHash,
 	}
 
 	// Save to database
@@ -281,13 +295,14 @@ func (uc *URLUseCase) toResponse(url *entity.URL) *entity.URLResponse {
 	}
 
 	return &entity.URLResponse{
-		ShortCode:   url.ShortCode,
-		ShortURL:    shortURL,
-		OriginalURL: url.OriginalURL,
-		ExpiresAt:   url.ExpiresAt,
-		CreatedAt:   url.CreatedAt,
-		ClickCount:  url.ClickCount,
-		QRCodeURL:   uc.baseURL + "/api/urls/" + url.ShortCode + "/qr",
+		ShortCode:         url.ShortCode,
+		ShortURL:          shortURL,
+		OriginalURL:       url.OriginalURL,
+		ExpiresAt:         url.ExpiresAt,
+		CreatedAt:         url.CreatedAt,
+		ClickCount:        url.ClickCount,
+		QRCodeURL:         uc.baseURL + "/api/urls/" + url.ShortCode + "/qr",
+		PasswordProtected: url.PasswordHash != "",
 	}
 }
 
@@ -349,4 +364,39 @@ func (uc *URLUseCase) GetLinkPreview(ctx context.Context, url string) (*entity.L
 		SiteName:    p.SiteName,
 		URL:         p.URL,
 	}, nil
+}
+
+func (uc *URLUseCase) VerifyPassword(ctx context.Context, shortCode, password string) (*entity.URL, error) {
+	url, err := uc.urlRepo.GetByShortCode(ctx, shortCode)
+	if err != nil {
+		return nil, err
+	}
+	if url == nil {
+		return nil, ErrURLNotFound
+	}
+
+	if url.PasswordHash == "" {
+		return url, nil
+	}
+
+	if password == "" {
+		return nil, ErrPasswordRequired
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(url.PasswordHash), []byte(password)); err != nil {
+		return nil, ErrInvalidPassword
+	}
+
+	return url, nil
+}
+
+func (uc *URLUseCase) IsPasswordProtected(ctx context.Context, shortCode string) (bool, error) {
+	url, err := uc.urlRepo.GetByShortCode(ctx, shortCode)
+	if err != nil {
+		return false, err
+	}
+	if url == nil {
+		return false, ErrURLNotFound
+	}
+	return url.PasswordHash != "", nil
 }

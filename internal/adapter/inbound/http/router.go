@@ -36,6 +36,10 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// Link Preview
 	mux.HandleFunc("GET /api/preview", cfg.URLHandler.GetLinkPreview)
 
+	// Password Protected URLs
+	mux.HandleFunc("GET /api/urls/{code}/protected", cfg.URLHandler.CheckPasswordProtected)
+	mux.HandleFunc("POST /api/urls/{code}/verify", cfg.URLHandler.VerifyPassword)
+
 	// Redirect (must be last as it's a catch-all)
 	mux.HandleFunc("GET /{code}", cfg.URLHandler.Redirect)
 

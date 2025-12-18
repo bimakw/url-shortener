@@ -79,6 +79,12 @@ func (h *URLHandler) Redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if password protected
+	if url.PasswordHash != "" {
+		Error(w, http.StatusForbidden, "This URL is password protected. Use POST /api/urls/{code}/verify to access.")
+		return
+	}
+
 	// Record click
 	click := &entity.Click{
 		ShortCode: shortCode,
@@ -238,6 +244,76 @@ func (h *URLHandler) GetLinkPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	Success(w, http.StatusOK, "Link preview fetched", preview)
+}
+
+func (h *URLHandler) VerifyPassword(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.PathValue("code")
+	if shortCode == "" {
+		Error(w, http.StatusBadRequest, "Short code is required")
+		return
+	}
+
+	var req entity.VerifyPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	url, err := h.urlUseCase.VerifyPassword(r.Context(), shortCode, req.Password)
+	if err != nil {
+		switch err {
+		case usecase.ErrURLNotFound:
+			Error(w, http.StatusNotFound, "URL not found")
+		case usecase.ErrPasswordRequired:
+			Error(w, http.StatusUnauthorized, "Password required")
+		case usecase.ErrInvalidPassword:
+			Error(w, http.StatusUnauthorized, "Invalid password")
+		default:
+			Error(w, http.StatusInternalServerError, "Failed to verify password")
+		}
+		return
+	}
+
+	// Record click
+	click := &entity.Click{
+		ShortCode: shortCode,
+		IPAddress: getClientIP(r),
+		UserAgent: r.UserAgent(),
+		Referrer:  r.Referer(),
+	}
+	parseUserAgent(click)
+	_ = h.urlUseCase.RecordClick(r.Context(), click)
+
+	Success(w, http.StatusOK, "Password verified", map[string]string{
+		"original_url": url.OriginalURL,
+	})
+}
+
+func (h *URLHandler) CheckPasswordProtected(w http.ResponseWriter, r *http.Request) {
+	shortCode := r.PathValue("code")
+	if shortCode == "" {
+		Error(w, http.StatusBadRequest, "Short code is required")
+		return
+	}
+
+	isProtected, err := h.urlUseCase.IsPasswordProtected(r.Context(), shortCode)
+	if err != nil {
+		if err == usecase.ErrURLNotFound {
+			Error(w, http.StatusNotFound, "URL not found")
+			return
+		}
+		Error(w, http.StatusInternalServerError, "Failed to check password protection")
+		return
+	}
+
+	Success(w, http.StatusOK, "Password protection status", map[string]bool{
+		"password_protected": isProtected,
+	})
 }
 
 func getClientIP(r *http.Request) string {
