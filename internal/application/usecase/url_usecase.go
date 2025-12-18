@@ -9,6 +9,7 @@ import (
 	"github.com/bimakw/url-shortener/internal/domain/entity"
 	"github.com/bimakw/url-shortener/internal/domain/repository"
 	"github.com/bimakw/url-shortener/pkg/nanoid"
+	"github.com/bimakw/url-shortener/pkg/preview"
 )
 
 var (
@@ -329,4 +330,23 @@ func (uc *URLUseCase) BulkCreateShortURLs(ctx context.Context, req entity.BulkCr
 		Failed:     len(req.URLs) - successful,
 		Results:    results,
 	}
+}
+
+func (uc *URLUseCase) GetLinkPreview(ctx context.Context, url string) (*entity.LinkPreview, error) {
+	if !isValidURL(url) {
+		return nil, ErrInvalidURL
+	}
+
+	p, err := preview.Fetch(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	return &entity.LinkPreview{
+		Title:       p.Title,
+		Description: p.Description,
+		Image:       p.Image,
+		SiteName:    p.SiteName,
+		URL:         p.URL,
+	}, nil
 }

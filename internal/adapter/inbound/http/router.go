@@ -33,6 +33,9 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// QR Code
 	mux.HandleFunc("GET /api/urls/{code}/qr", cfg.QRHandler.GenerateQR)
 
+	// Link Preview
+	mux.HandleFunc("GET /api/preview", cfg.URLHandler.GetLinkPreview)
+
 	// Redirect (must be last as it's a catch-all)
 	mux.HandleFunc("GET /{code}", cfg.URLHandler.Redirect)
 
