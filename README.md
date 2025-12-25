@@ -260,6 +260,22 @@ curl "http://localhost:8080/api/urls/my-link/qr?size=512" -o qr-large.png
 - **URL creation**: ~10-20ms
 - **Throughput**: 10,000+ requests/second (depends on hardware)
 
+## Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with verbose output
+go test ./... -v
+```
+
+| Package | Tests | Coverage |
+|---------|-------|----------|
+| nanoid | 10 | ID generation, uniqueness, alphabet validation |
+| utm | 20 | Build, HasUTM, Strip, edge cases |
+| entity | 22 | URL struct, expiry, redirect logic |
+
 ## License
 
 This project is licensed under the MIT License with Attribution Requirement - see the [LICENSE](LICENSE) file for details.
