@@ -57,5 +57,5 @@ func (h *QRHandler) GenerateQR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.WriteHeader(http.StatusOK)
-	w.Write(png)
+	_, _ = w.Write(png)
 }

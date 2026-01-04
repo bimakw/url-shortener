@@ -15,7 +15,7 @@ type Response struct {
 func Success(w http.ResponseWriter, code int, message string, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(Response{
+	_ = json.NewEncoder(w).Encode(Response{
 		Success: true,
 		Message: message,
 		Data:    data,
@@ -25,7 +25,7 @@ func Success(w http.ResponseWriter, code int, message string, data interface{}) 
 func Error(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(Response{
+	_ = json.NewEncoder(w).Encode(Response{
 		Success: false,
 		Error:   message,
 	})
@@ -34,5 +34,5 @@ func Error(w http.ResponseWriter, code int, message string) {
 func JSON(w http.ResponseWriter, code int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(data)
 }

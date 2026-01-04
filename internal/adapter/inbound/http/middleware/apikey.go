@@ -8,6 +8,14 @@ import (
 	"github.com/bimakw/url-shortener/internal/application/usecase"
 )
 
+type contextKey string
+
+const (
+	ContextKeyUserID     contextKey = "user_id"
+	ContextKeyAPIKeyID   contextKey = "api_key_id"
+	ContextKeyAPIScopes  contextKey = "api_key_scopes"
+)
+
 type APIKeyMiddleware struct {
 	apiKeyUseCase *usecase.APIKeyUseCase
 }
@@ -56,9 +64,9 @@ func (m *APIKeyMiddleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		// Add user info to context
-		ctx := context.WithValue(r.Context(), "user_id", apiKey.UserID)
-		ctx = context.WithValue(ctx, "api_key_id", apiKey.ID)
-		ctx = context.WithValue(ctx, "api_key_scopes", apiKey.Scopes)
+		ctx := context.WithValue(r.Context(), ContextKeyUserID, apiKey.UserID)
+		ctx = context.WithValue(ctx, ContextKeyAPIKeyID, apiKey.ID)
+		ctx = context.WithValue(ctx, ContextKeyAPIScopes, apiKey.Scopes)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
