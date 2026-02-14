@@ -22,19 +22,15 @@ import (
 )
 
 func main() {
-	// Load .env file
 	_ = godotenv.Load()
 
-	// Setup logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
-	// Load config
 	cfg := infrastructure.LoadConfig()
 
-	// Connect to PostgreSQL
 	db, err := sql.Open("postgres", cfg.Database.DSN())
 	if err != nil {
 		logger.Error("failed to connect to database", slog.Any("error", err))
@@ -59,12 +55,10 @@ func main() {
 
 	logger.Info("database connected and migrations applied")
 
-	// Initialize repositories
 	urlRepo := postgres.NewURLRepository(db)
 	clickRepo := postgres.NewClickRepository(db)
 	apiKeyRepo := postgres.NewAPIKeyRepository(db)
 
-	// Connect to Redis (optional)
 	var urlCache *redisRepo.URLCacheRepository
 	redisClient, err := redisRepo.NewRedisClient(
 		cfg.Redis.Host,
@@ -79,11 +73,9 @@ func main() {
 		logger.Info("redis connected")
 	}
 
-	// Initialize GeoIP client
 	geoipClient := geoip.NewClient()
 	logger.Info("geoip client initialized")
 
-	// Initialize use cases
 	urlUseCase := usecase.NewURLUseCase(usecase.URLUseCaseConfig{
 		URLRepo:     urlRepo,
 		URLCache:    urlCache,
@@ -93,15 +85,12 @@ func main() {
 		CodeLength:  cfg.App.ShortCodeLength,
 	})
 
-	// Initialize API key use case
 	apiKeyUseCase := usecase.NewAPIKeyUseCase(apiKeyRepo)
 
-	// Initialize handlers
 	urlHandler := handler.NewURLHandler(urlUseCase)
 	qrHandler := handler.NewQRHandler(urlUseCase, cfg.App.BaseURL)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyUseCase)
 
-	// Setup router
 	router := handler.NewRouter(handler.RouterConfig{
 		URLHandler:    urlHandler,
 		QRHandler:     qrHandler,
@@ -110,7 +99,6 @@ func main() {
 		RateLimit:     cfg.App.RateLimit,
 	})
 
-	// Create server
 	server := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
 		Handler:      router,
@@ -118,7 +106,6 @@ func main() {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
-	// Start server in goroutine
 	go func() {
 		logger.Info("server starting", slog.String("port", cfg.Server.Port))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

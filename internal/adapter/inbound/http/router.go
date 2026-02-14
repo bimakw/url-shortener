@@ -41,7 +41,6 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	mux.HandleFunc("GET /api/urls/{code}/protected", cfg.URLHandler.CheckPasswordProtected)
 	mux.HandleFunc("POST /api/urls/{code}/verify", cfg.URLHandler.VerifyPassword)
 
-	// UTM Builder
 	mux.HandleFunc("POST /api/utm/build", cfg.URLHandler.BuildUTMUrl)
 	mux.HandleFunc("GET /api/utm/strip", cfg.URLHandler.StripUTM)
 
@@ -56,7 +55,6 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// Redirect (must be last as it's a catch-all)
 	mux.HandleFunc("GET /{code}", cfg.URLHandler.Redirect)
 
-	// Apply middlewares
 	var handler http.Handler = mux
 
 	// CORS

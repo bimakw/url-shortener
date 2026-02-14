@@ -12,7 +12,6 @@ const (
 	DefaultSize = 8
 )
 
-// Generate creates a new nanoid with the specified size
 func Generate(size int) (string, error) {
 	if size <= 0 {
 		size = DefaultSize
@@ -32,7 +31,6 @@ func Generate(size int) (string, error) {
 	return string(bytes), nil
 }
 
-// MustGenerate creates a new nanoid and panics on error
 func MustGenerate(size int) string {
 	id, err := Generate(size)
 	if err != nil {
@@ -41,7 +39,6 @@ func MustGenerate(size int) string {
 	return id
 }
 
-// New creates a new nanoid with default size
 func New() (string, error) {
 	return Generate(DefaultSize)
 }
